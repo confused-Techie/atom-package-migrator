@@ -56,9 +56,12 @@ function run(rawArg) {
 
               // now to write the package under this new name, and save its contents to the
               // package pointer.
-              fs.writeFileSync(`${destDir}${path.sep}packages${path.sep}${id}.json`, JSON.parse(data));
-
+              fs.writeFileSync(`${destDir}${path.sep}packages${path.sep}${id}.json`, JSON.stringify(data, null, 4));
+              console.log(`Successfully wrote: ${fileName}`);
               // now to add to package pointer.
+              tmpPointer[fileName] = id;
+              // this assigns its key in the tmp pointer.
+
             } else {
               nonMigrated.push({ name: fileName, reason: packValidity.reason});
             }
@@ -71,6 +74,18 @@ function run(rawArg) {
         }
       } // else this is a directory
     });
+
+
+    // now once this is all done, we can go ahead, and save the package Pointer file.
+    fs.writeFileSync(`${destDir}${path.sep}package_pointer.json`, JSON.stringify(tmpPointer, null, 4));
+
+    console.log("Successfully wrote package_pointer.json");
+
+    // now to write out all failed packages.
+
+    for (let i = 0; i < nonMigrated.length; i++) {
+      console.log(`Failed to Write: ${nonMigrated[i].name}; ${nonMigrated[i].reason}`);
+    }
 
   } catch(err) {
     console.error(err);
