@@ -1,3 +1,3 @@
 #!/usr/bin/env node
 
-modulex.exports = require("./index.js").run(process.arv.slice(2));
+module.exports = require("./index.js").run(process.argv.slice(2));

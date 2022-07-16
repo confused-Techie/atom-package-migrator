@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
+const axios = require("axios");
 
 const srcDir = "./data";
 const destDir = "./dest";
@@ -8,85 +9,58 @@ const destDir = "./dest";
 let nonMigrated = [];
 let tmpPointer = {};
 
-function run(rawArg) {
+async function run(rawArg) {
   // this will use console.log excessively, since ideally it will only ever be run once.
   console.log("Begginning migration.");
+
+  // before we start the migration, lets make sure our folders exist.
+  fs.mkdirSync(`${destDir}${path.sep}packages${path.sep}`, { recursive: true });
+
   try {
 
-    // first lets get a list of files, from our data dir.
-    fs.readdirSync(srcDir).forEach(file => {
-      // now we will have a loop of each and every file within the dir.
-      // which will additionally include directories. so we need to filter these.
-      if (!fs.stats.isDirectory()) {
-        let data = fs.readFileSync(`${srcDir}${path.sep}${file}`, {encoding:"utf8"});
+    const files = fs.readdirSync(srcDir);
 
-        // ensure we were able to get data.
+    for (const file of files) {
+      let stats = fs.lstatSync(`${srcDir}${path.sep}${file}`);
+      if (!stats.isDirectory()) {
+        let data = fs.readFileSync(`${srcDir}${path.sep}${file}`, {encoding: "utf8"});
+
         if (data) {
           data = JSON.parse(data);
-          // we know since the archiver conterted names to be URL safe, we want the name based
-          // off the package name itself.
           let fileName = data.name;
-          // now we have the file contents as a JS Obj = data, and the file name.
-
-          // now we want to check that this is allowed to be migrated.
-          let nameValidity = valid_name(fileName);
-
+          let nameValidity = await valid_name(fileName);
           if (nameValidity.ok) {
+            valid_data(data)
+              .then((res) => {
+                const cur = Date.now();
+                data.created = cur;
+                data.updated = cur;
+                data.star_gazers = [];
+                data.migrated = true;
 
-            let packValidity = valid_data(data);
+                let id = uuidv4();
 
-            if (packValidity.ok) {
+                fs.writeFileSync(`${destDir}${path.sep}packages${path.sep}${id}.json`, JSON.stringify(data, null, 4));
+                console.log(`Successfully wrote: ${fileName}`);
+                // now to add to package pointer.
+                tmpPointer[fileName] = `${id}.json`;
+                // this assigns its key in the tmp pointer.
 
-              // Now to create any custom fields that don't exist otherwise.
+                finish();
+              })
+              .catch((err) => {
+                nonMigrated.push({ name: fileName, reason: err.reason});
+                finish();
+              });
 
-              // created, updated, star_gazers,
-              const cur = Date.now();
-
-              data.created = cur;
-              data.updated = cur;
-              data.star_gazers = [];
-              data.migrated = true;
-
-              // we are adding the current epoch date, in ms as the created and updated time.
-              // additionally setting up the empty array of star_gazers.
-              // then finally a flag to indicate that this package was migrated.
-              // But now that the file is setup, we need to save the package content.
-
-              let id = uuidv4();
-
-              // now to write the package under this new name, and save its contents to the
-              // package pointer.
-              fs.writeFileSync(`${destDir}${path.sep}packages${path.sep}${id}.json`, JSON.stringify(data, null, 4));
-              console.log(`Successfully wrote: ${fileName}`);
-              // now to add to package pointer.
-              tmpPointer[fileName] = id;
-              // this assigns its key in the tmp pointer.
-
-            } else {
-              nonMigrated.push({ name: fileName, reason: packValidity.reason});
-            }
           } else {
-            // the file did not pass the check. Lets add it to an array, to display later.
+            // nameValidity failed.
             nonMigrated.push({ name: fileName, reason: nameValidity.reason});
+            finish();
           }
-        } else {
-          nonMigrated.push({ name: file, reason: "Unable to retreive contents"});
         }
-      } // else this is a directory
-    });
-
-
-    // now once this is all done, we can go ahead, and save the package Pointer file.
-    fs.writeFileSync(`${destDir}${path.sep}package_pointer.json`, JSON.stringify(tmpPointer, null, 4));
-
-    console.log("Successfully wrote package_pointer.json");
-
-    // now to write out all failed packages.
-
-    for (let i = 0; i < nonMigrated.length; i++) {
-      console.log(`Failed to Write: ${nonMigrated[i].name}; ${nonMigrated[i].reason}`);
+      }
     }
-
   } catch(err) {
     console.error(err);
     process.exit(1);
@@ -94,20 +68,50 @@ function run(rawArg) {
 
 }
 
-function valid_name(name) {
+async function finish() {
+  console.log("Finishing...");
+  fs.writeFileSync(`${destDir}${path.sep}package_pointer.json`, JSON.stringify(tmpPointer, null, 4));
+  console.log("Successfully wrote package_pointer.json");
+  fs.writeFileSync(`${destDir}${path.sep}non_migrated.json`, JSON.stringify(nonMigrated, null, 4));
+  console.log("Successfully wrote non_migrated.json");
+}
+
+async function valid_name(name) {
   let escapeName = encodeURIComponent(name);
+
+  const bannedNames = [
+
+  ];
 
   if (escapeName !== name) {
     // checks for strict equality, with the name field within the file.
     return { ok: false, reason: "Non-URL Safe name." };
   }
 
+  for (let i = 0; i < bannedNames.length; i++) {
+    if (name == bannedNames[i]) {
+      return { ok: false, reason: "Name is banned for upload." };
+    }
+  }
   // other checks
   return { ok: true };
 }
 
 function valid_data(data) {
-  return { ok: true };
+  return new Promise(function (resolve, reject) {
+    // check that its available on GH
+    axios.get(data.repository.url)
+      .then(function (res) {
+        resolve({ ok: true });
+      })
+      .catch(function (err) {
+        if (err.response.status == 404) {
+          reject({ ok: false, reason: "Package is no Longer Available" });
+        } else {
+          reject({ ok: false, reason: "AN unkown error occured during retrevial" });
+        }
+      });
+  });
 }
 
 module.exports = {
