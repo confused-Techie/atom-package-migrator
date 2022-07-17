@@ -103,7 +103,6 @@ async function createPack(data, tagData) {
   data.creation_method = "Migrated from Atom.io";
 
   // now the hard part of adding in all the tag info.
-  console.log(Object.keys(data.versions).length); // todo use these keys properly.
   for (let i = 0; i < Object.keys(data.versions).length; i++) {
     // now one each version within our package data, lets find a matching version tag within the gh tags data
     for (let y = 0; y < tagData.content.length; y++) {
