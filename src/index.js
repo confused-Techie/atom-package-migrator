@@ -120,10 +120,14 @@ function valid_data(data) {
         resolve({ ok: true });
       })
       .catch(function (err) {
-        if (err.response.status == 404) {
-          reject({ ok: false, reason: "Package is no Longer Available" });
-        } else {
-          reject({ ok: false, reason: "AN unkown error occured during retrevial" });
+        try {
+          if (err.response.status == 404) {
+            reject({ ok: false, reason: "Package is no Longer Available" });
+          } else {
+            reject({ ok: false, reason: "An unkown error occured during retrevial" });
+          }
+        } catch(err) {
+          reject({ ok: false, reason: "An unkown error was caught during an HTTP error."});
         }
       });
   });

@@ -1,3 +1,4 @@
+# ** CURRENTLY NON_FUNCTIONAL **
 This CLI application is made to convert Atom.io Archived Repository package data.
 
 Intended that this data was originally archived via [AtomPackagesArchive](https://github.com/confused-Techie/AtomPackagesArchive) and will then be deployed to the new [atom-community-server-backend-JS](https://github.com/confused-Techie/atom-community-server-backend-JS).
