@@ -3,6 +3,8 @@ const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 const axios = require("axios");
 
+const { user_name, token } = require("./config.js");
+
 const srcDir = "./data";
 const destDir = "./dest";
 
@@ -11,6 +13,9 @@ let tmpPointer = {};
 
 let totalFiles = 0;
 let currentFile = 0;
+
+const gen_token = `${user_name}:${token}`;
+const encodedToken = Buffer.from(gen_token).toString('base64');
 
 async function run(rawArg) {
   console.log("Begginning Migration...");
@@ -99,14 +104,14 @@ async function createPack(data, tagData) {
 
   // now the hard part of adding in all the tag info.
   console.log(Object.keys(data.versions).length); // todo use these keys properly.
-  for (let i = 0; i < data.versions.length; i++) {
+  for (let i = 0; i < Object.keys(data.versions).length; i++) {
     // now one each version within our package data, lets find a matching version tag within the gh tags data
     for (let y = 0; y < tagData.content.length; y++) {
-      console.log(`Tags: Tag: ${tagData.content[y]} - Version: ${data.versions[i].version}`);
-      if (tagData.content[y] == data.versions[i].version) {
+      let ver = Object.keys(data.versions)[i];
+      if (tagData.content[y].name.replace("v", "") == ver) {
         // they match, stuff the data into the package.
-        data.versions[i].tarball_url = tagData.content[y].tagball_url;
-        data.versions[i].sha = tagData.content[y].sha;
+        data.versions[ver].tarball_url = tagData.content[y].tarball_url;
+        data.versions[ver].sha = tagData.content[y].commit.sha;
       }
     }
   }
@@ -187,8 +192,14 @@ async function finish() {
 }
 
 async function valid_pack(pack) {
+  let axiosConfig = {
+    method: 'get',
+    url: pack.repository.url,
+    headers: { 'Authorization': 'Basic '+ encodedToken }
+  };
+
   try {
-    const res = await axios.get(pack.repository.url);
+    const res = await axios(axiosConfig);
     return { ok: true };
   } catch(err) {
     if (err.response.status == 404) {
@@ -200,8 +211,14 @@ async function valid_pack(pack) {
 }
 
 async function getTags(data) {
+  let axiosConfig = {
+    method: 'get',
+    url: `https://api.github.com/repos/${data.repository.url.replace("https://github.com/", "")}/tags`,
+    headers: { 'Authorization': 'Basic '+ encodedToken }
+  };
+
   try {
-    const res = await axios.get(`https://api.github.com/repos/${data.repository.url.replace("https://github.com/", "")}/tags`);
+    const res = await axios(axiosConfig);
     return { ok: true, content: res.data };
   } catch(err) {
     if (err.response.status == 404) {
