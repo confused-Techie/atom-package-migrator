@@ -154,30 +154,6 @@ async function valid_name(name) {
   return { ok: true };
 }
 
-async function valid_packOLDD(pack) {
-  axios.get(pack.repository.url)
-    .then(function (res) {
-      return { ok: true };
-    })
-    .catch(function (err) {
-      if (err.response.status == 404) {
-        return { ok: false, reason: "Package is no Longer Available"};
-      } else {
-        return { ok: false, reason: "An unknown error was caught during an HTTP request."};
-      }
-    });
-}
-
-async function getTagsOLD(data) {
-  axios.get(`https://api.github.com/repos/${data.repository.url.replace("https://github.com/", "")}/tags`)
-    .then(function (res) {
-      return { ok: true, content: res };
-    })
-    .catch(function (err) {
-      return { ok: false, reason: err };
-    });
-}
-
 async function finish() {
   console.log(`Current: ${currentFile} - Total: ${totalFiles}`);
   if (currentFile == totalFiles) {
