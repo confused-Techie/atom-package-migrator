@@ -29,7 +29,10 @@ async function run(rawArg) {
     for await (const file of files) {
       currentFile++;
 
-      await delay(1000);
+      await delay(1500); // If each package takes 1 second to handle, this would allow 2400 packages
+      // to be handled per second. Now that does get very close to the authenticated user 5000 request limit
+      // but should avoid it, as that would be 2500 packages, or otherwise 5000 api calls.
+      // Although I will still build in a method to help prevent reaching our limit below.
       await handleFile(file);
 
       // now to call our finish method, to see if we should write the package pointer, and nonMigrated list.
@@ -54,7 +57,6 @@ async function handleFile(file) {
     let data = JSON.parse(rawdata);
 
     if (data) {
-      //data = JSON.parse(data);
       let fileName = data.name;
       let nameValidity = await valid_name(fileName);
       let packageValidity = await valid_pack(data);
@@ -194,6 +196,22 @@ async function getTags(data) {
 
   try {
     const res = await axios(axiosConfig);
+    // now we want to check the status of our api rate limits.
+    let rateLimitRemaining = res.headers['x-ratelimit-remaining'];
+    let rateLimitMax = res.headers['x-ratelimit-limit'];
+    let rateLimitUsed = res.headers['x-ratelimit-used'];
+    let rateLimitReset = res.headers['x-ratelimit-reset'];
+
+    if (rateLimitMax - rateLimitUsed < 20) {
+      console.log(`Rate Limit Exceedded! ${rateLimitRemaining} - Reset: ${rateLimitReset}`);
+      let time = Date.now();
+      let timeToWait = (rateLimitReset*1000) - time;
+      // multiplying here ^^^, since rateLimitReset is in epoch times seconds
+      console.log(`Rate Limit Hit. Waiting ${timeToWait}ms until rate limit lifted.`);
+      await delay(timeToWait);
+    } else {
+      console.log(`Rate Limit - Used: ${rateLimitUsed} - Remaining: ${rateLimitRemaining}`);
+    }
     return { ok: true, content: res.data };
   } catch(err) {
     if (err.response.status == 404) {
