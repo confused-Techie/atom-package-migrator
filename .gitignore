@@ -2,3 +2,6 @@ node_modules/
 data/
 dest/
 src/config.js
+dest/packages/
+dest/archival/
+done_data/

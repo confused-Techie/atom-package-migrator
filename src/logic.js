@@ -27,16 +27,24 @@ async function run(rawArg) {
     totalFiles = files.length;
 
     for await (const file of files) {
-      currentFile++;
+      try {
+        currentFile++;
 
-      await delay(1500); // If each package takes 1 second to handle, this would allow 2400 packages
-      // to be handled per second. Now that does get very close to the authenticated user 5000 request limit
-      // but should avoid it, as that would be 2500 packages, or otherwise 5000 api calls.
-      // Although I will still build in a method to help prevent reaching our limit below.
-      await handleFile(file);
+        await delay(1500); // If each package takes 1 second to handle, this would allow 2400 packages
+        // to be handled per second. Now that does get very close to the authenticated user 5000 request limit
+        // but should avoid it, as that would be 2500 packages, or otherwise 5000 api calls.
+        // Although I will still build in a method to help prevent reaching our limit below.
+        await handleFile(file);
 
-      // now to call our finish method, to see if we should write the package pointer, and nonMigrated list.
-      await finish();
+        // now to call our finish method, to see if we should write the package pointer, and nonMigrated list.
+        await finish();
+
+      } catch(err) {
+        console.error(`Severe Mid-Loop Caught Error: ${err}`);
+        console.log('Attempting to save progress and exit');
+        await finish(true);
+      }
+
     }
 
   } catch(err) {
@@ -58,9 +66,25 @@ async function handleFile(file) {
 
     if (data) {
       let fileName = data.name;
-      let nameValidity = await valid_name(fileName);
-      let packageValidity = await valid_pack(data);
-      let tagData = await getTags(data);
+      //let nameValidity = await valid_name(fileName);
+      //let packageValidity = await valid_pack(data);
+      //let tagData = await getTags(data);
+
+      let nameValidity;
+      let packageValidity;
+      let tagData;
+
+      try {
+        nameValidity = await valid_name(fileName);
+        packageValidity = await valid_pack(data);
+        tagData = await getTags(data);
+      } catch(err) {
+        console.error(`Failure occured during HTTP calls. Attempting Recovery.`);
+        if (!nameValidity) { nameValidity = { ok: false, reason: `Unknown HTTP error ${err}`}};
+        if (!packageValidity) { packageValidity = { ok: false, reason: `Unknown HTTP error ${err}`}};
+        if (!tagData) { tagData = { ok: false, reason: `Unkown HTTP error ${err}`}};
+      }
+
       let id = uuidv4();
 
       if (nameValidity.ok && packageValidity.ok && tagData.ok) {
@@ -155,9 +179,9 @@ async function valid_name(name) {
   return { ok: true };
 }
 
-async function finish() {
+async function finish(override) {
   console.log(`Current: ${currentFile} - Total: ${totalFiles}`);
-  if (currentFile == totalFiles) {
+  if (currentFile == totalFiles || override) {
     console.log("Finishing...");
     fs.writeFileSync(`${destDir}${path.sep}package_pointer.json`, JSON.stringify(tmpPointer, null, 4));
     console.log("Successfully wrote package_pointer.json");
@@ -179,11 +203,16 @@ async function valid_pack(pack) {
     const res = await axios(axiosConfig);
     return { ok: true };
   } catch(err) {
-    if (err.response.status == 404) {
-      return { ok: false, reason: "Package is no longer available" };
+    if (err.response) {
+      if (err.response.status == 404) {
+        return { ok: false, reason: "Package is no longer available" };
+      } else {
+        return { ok: false, reason: `Error Occured During HTTP Request: ${err}` };
+      }
     } else {
-      return { ok: false, reason: `Error Occured During HTTP Request: ${err}` };
+      return { ok: false, reason: `Error Occured during HTTP Request: ${err}`};
     }
+
   }
 }
 
